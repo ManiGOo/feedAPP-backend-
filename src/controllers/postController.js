@@ -1,33 +1,21 @@
 import pool from "../config/db.js";
 import cloudinary from "../config/cloudinary.js";
 
-// Get all posts with like counts and whether current user liked
+// Get all posts (with author info)
 export const getPosts = async (req, res) => {
-  const userId = req.user.id; // from authMiddleware
-
+  const userId = req.user.id;
   try {
-    const result = await pool.query(
+    const postsResult = await pool.query(
       `
-      SELECT 
-        p.id, 
-        p.content, 
-        p.image_url, 
-        p.created_at, 
-        u.username,
-        -- like count
-        COALESCE(COUNT(l.id), 0) AS like_count,
-        -- whether the logged-in user has liked
-        BOOL_OR(l.user_id = $1) AS liked
+      SELECT p.id, p.content, p.media_url, p.media_type, p.created_at,
+             u.id AS author_id, u.username AS author, u.avatar_url
       FROM posts p
       JOIN users u ON p.user_id = u.id
-      LEFT JOIN likes l ON l.post_id = p.id
-      GROUP BY p.id, u.username
       ORDER BY p.created_at DESC
-      `,
-      [userId]
+      `
     );
-
-    res.json(result.rows);
+    console.log("Fetched posts:", postsResult.rows.length); // log number of posts
+    res.json(postsResult.rows);
   } catch (err) {
     console.error("Error fetching posts:", err);
     res.status(500).json({ error: "Failed to fetch posts" });
@@ -113,12 +101,9 @@ export const toggleLike = async (req, res) => {
       "SELECT COUNT(*) FROM likes WHERE post_id = $1",
       [postId]
     );
-    const likeCount = parseInt(countRes.rows[0].count);
 
-    // ✅ Emit socket event for all clients
-    io.emit("likeUpdated", { postId, likeCount });
-
-    res.json({ liked, like_count: likeCount });
+    console.log("Total likes:", countRes.rows[0].count);
+    res.json({ liked, like_count: parseInt(countRes.rows[0].count) });
   } catch (err) {
     console.error("Error toggling like:", err);
     res.status(500).json({ error: "Failed to toggle like" });
