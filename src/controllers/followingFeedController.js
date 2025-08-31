@@ -1,5 +1,7 @@
+// src/controllers/followingFeedController.js
 import pool from "../config/db.js";
 
+// Get posts from users the current user follows
 export const getFollowingPosts = async (req, res) => {
   const userId = req.user.id;
 
@@ -18,7 +20,7 @@ export const getFollowingPosts = async (req, res) => {
         COALESCE(likes_count.count, 0) AS like_count,
         CASE WHEN user_likes.user_id IS NULL THEN false ELSE true END AS liked_by_me,
         COALESCE(comments_count.count, 0) AS comments_count,
-        CASE WHEN follows.follower_id IS NULL THEN false ELSE true END AS is_followed_author
+        CASE WHEN f.follower_id IS NULL THEN false ELSE true END AS is_followed_author
       FROM posts p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN (
@@ -36,9 +38,10 @@ export const getFollowingPosts = async (req, res) => {
         FROM comments
         GROUP BY post_id
       ) AS comments_count ON comments_count.post_id = p.id
-      LEFT JOIN follows ON follows.follower_id = $1 AND follows.following_id = p.user_id
+      LEFT JOIN follows f
+        ON f.follower_id = $1 AND f.followee_id = p.user_id
       WHERE p.user_id IN (
-        SELECT following_id 
+        SELECT followee_id
         FROM follows 
         WHERE follower_id = $1
       )
@@ -51,5 +54,45 @@ export const getFollowingPosts = async (req, res) => {
   } catch (err) {
     console.error("Error fetching following posts:", err);
     res.status(500).json({ error: "Failed to fetch following posts" });
+  }
+};
+
+// Toggle follow/unfollow a user
+export const toggleFollow = async (req, res) => {
+  const followerId = req.user.id;
+  const followeeId = parseInt(req.params.userId);
+
+  if (followerId === followeeId) {
+    return res.status(400).json({ error: "You cannot follow yourself." });
+  }
+
+  try {
+    // Check if already following
+    const existing = await pool.query(
+      `SELECT * FROM follows WHERE follower_id = $1 AND followee_id = $2`,
+      [followerId, followeeId]
+    );
+
+    let isFollowing = false;
+
+    if (existing.rows.length > 0) {
+      // Unfollow
+      await pool.query(
+        `DELETE FROM follows WHERE follower_id = $1 AND followee_id = $2`,
+        [followerId, followeeId]
+      );
+    } else {
+      // Follow
+      await pool.query(
+        `INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)`,
+        [followerId, followeeId]
+      );
+      isFollowing = true;
+    }
+
+    res.json({ success: true, isFollowing });
+  } catch (err) {
+    console.error("Error toggling follow:", err);
+    res.status(500).json({ error: "Failed to toggle follow" });
   }
 };

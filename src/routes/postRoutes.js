@@ -1,24 +1,31 @@
 import express from "express";
-import { getPosts, createPost, toggleLike, getPostById } from "../controllers/postController.js";
+import multer from "multer";
 import { authMiddleware } from "../middleware/auth.js";
 import commentRoutes from "./commentRoutes.js";
-import multer from "multer";
+import {
+  getPosts,
+  createPost,
+  toggleLike,
+  getPostById,
+  deletePost,
+} from "../controllers/postController.js";
 
 const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// GET all posts
-router.get("/", authMiddleware, async (req, res, next) => {
-  console.log("GET /posts called by user:", req.user?.id);
+// -------------------
+// Middleware to log user actions
+const logAction = (action) => (req, res, next) => {
+  console.log(`${action} called by user:`, req.user?.id);
   next();
-}, getPosts);
+};
+
+// GET all posts
+router.get("/", authMiddleware, logAction("GET /posts"), getPosts);
 
 // GET a single post (with comments)
-router.get("/:id", authMiddleware, (req, res, next) => {
-  console.log(`GET /posts/${req.params.id} called by user:`, req.user?.id);
-  next();
-}, getPostById);
+router.get("/:id", authMiddleware, logAction((req) => `GET /posts/${req.params.id}`), getPostById);
 
 // POST a new post (image/video optional)
 router.post(
@@ -28,20 +35,15 @@ router.post(
     { name: "image", maxCount: 1 },
     { name: "video", maxCount: 1 },
   ]),
-  async (req, res, next) => {
-    console.log("POST /posts called by user:", req.user?.id);
-    console.log("Request body:", req.body);
-    console.log("Request files:", req.files);
-    next();
-  },
+  logAction("POST /posts"),
   createPost
 );
 
+// DELETE a post (only owner)
+router.delete("/:id", authMiddleware, logAction((req) => `DELETE /posts/${req.params.id}`), deletePost);
+
 // Toggle like
-router.post("/:postId/like", authMiddleware, (req, res, next) => {
-  console.log(`POST /posts/${req.params.postId}/like called by user:`, req.user?.id);
-  next();
-}, toggleLike);
+router.post("/:postId/like", authMiddleware, logAction((req) => `POST /posts/${req.params.postId}/like`), toggleLike);
 
 // Mount comment routes under /:postId/comments
 router.use("/:postId/comments", commentRoutes);

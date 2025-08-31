@@ -1,10 +1,14 @@
 // src/routes/followingFeedRoutes.js
 import express from "express";
 import { authMiddleware } from "../middleware/auth.js";
-import { getFollowingPosts } from "../controllers/followingFeedController.js";
+import { getFollowingPosts, toggleFollow } from "../controllers/followingFeedController.js";
 
 const router = express.Router();
 
+// Get posts from users the current user follows
 router.get("/", authMiddleware, getFollowingPosts);
+
+// Toggle follow/unfollow a user
+router.post("/toggle/:userId", authMiddleware, toggleFollow);
 
 export default router;
