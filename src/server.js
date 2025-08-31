@@ -23,7 +23,7 @@ app.use("/api/auth", authRoutes);
 
 // protected routes
 app.use("/api/posts", authMiddleware, postRoutes);
-app.use("/api/posts/:id/comments", authMiddleware, commentRoutes);
+app.use("/api/posts/:postId/comments", authMiddleware, commentRoutes);
 app.use("/api/users", authMiddleware, userRoutes); // ✅ mount user routes
 
 // test route

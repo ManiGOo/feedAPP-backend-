@@ -1,5 +1,5 @@
 import express from "express";
-import { getPosts, createPost, toggleLike } from "../controllers/postController.js";
+import { getPosts, createPost, toggleLike, getPostById } from "../controllers/postController.js";
 import { authMiddleware } from "../middleware/auth.js";
 import commentRoutes from "./commentRoutes.js";
 import multer from "multer";
@@ -13,6 +13,12 @@ router.get("/", authMiddleware, async (req, res, next) => {
   console.log("GET /posts called by user:", req.user?.id);
   next();
 }, getPosts);
+
+// GET a single post (with comments)
+router.get("/:id", authMiddleware, (req, res, next) => {
+  console.log(`GET /posts/${req.params.id} called by user:`, req.user?.id);
+  next();
+}, getPostById);
 
 // POST a new post (image/video optional)
 router.post(

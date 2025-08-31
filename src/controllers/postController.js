@@ -1,20 +1,46 @@
 import pool from "../config/db.js";
 import cloudinary from "../config/cloudinary.js";
 
-// Get all posts (with author info)
+// Get all posts (with author info + likes + comments count)
 export const getPosts = async (req, res) => {
   const userId = req.user.id;
   try {
     const postsResult = await pool.query(
       `
-      SELECT p.id, p.content, p.media_url, p.media_type, p.created_at,
-             u.id AS author_id, u.username AS author, u.avatar_url
+      SELECT 
+          p.id,
+          p.content,
+          p.media_url,
+          p.media_type,
+          p.created_at,
+          u.id AS author_id,
+          u.username AS author,
+          u.avatar_url,
+          COALESCE(likes_count.count, 0) AS like_count,
+          CASE WHEN user_likes.user_id IS NULL THEN false ELSE true END AS liked_by_me,
+          COALESCE(comments_count.count, 0) AS comments_count
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*) AS count
+        FROM likes
+        GROUP BY post_id
+      ) AS likes_count ON likes_count.post_id = p.id
+      LEFT JOIN (
+        SELECT post_id, user_id
+        FROM likes
+        WHERE user_id = $1
+      ) AS user_likes ON user_likes.post_id = p.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*) AS count
+        FROM comments
+        GROUP BY post_id
+      ) AS comments_count ON comments_count.post_id = p.id
       ORDER BY p.created_at DESC
-      `
+      `,
+      [userId]
     );
-    console.log("Fetched posts:", postsResult.rows.length); // log number of posts
+
     res.json(postsResult.rows);
   } catch (err) {
     console.error("Error fetching posts:", err);
@@ -107,5 +133,60 @@ export const toggleLike = async (req, res) => {
   } catch (err) {
     console.error("Error toggling like:", err);
     res.status(500).json({ error: "Failed to toggle like" });
+  }
+};
+
+// Get a single post by ID (with author + comments + likes)
+export const getPostById = async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const postResult = await pool.query(
+      `
+      SELECT p.id, p.content, p.media_url, p.media_type, p.created_at,
+             u.id AS author_id, u.username AS author, u.avatar_url,
+             COALESCE(likes_count.count, 0) AS like_count,
+             CASE WHEN user_likes.user_id IS NULL THEN false ELSE true END AS liked_by_me
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*) AS count
+        FROM likes
+        WHERE post_id = $1
+        GROUP BY post_id
+      ) AS likes_count ON likes_count.post_id = p.id
+      LEFT JOIN (
+        SELECT post_id, user_id
+        FROM likes
+        WHERE user_id = $2
+      ) AS user_likes ON user_likes.post_id = p.id
+      WHERE p.id = $1
+      `,
+      [id, userId]
+    );
+
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+    const post = postResult.rows[0];
+
+    const commentsResult = await pool.query(
+      `SELECT c.id, c.content, c.created_at,
+              u.id AS user_id, u.username, u.avatar_url
+       FROM comments c
+       JOIN users u ON c.user_id = u.id
+       WHERE c.post_id = $1
+       ORDER BY c.created_at ASC`,
+      [id]
+    );
+
+    res.json({
+      ...post,
+      comments: commentsResult.rows,
+    });
+  } catch (err) {
+    console.error("Error fetching post by ID:", err);
+    res.status(500).json({ error: "Failed to fetch post" });
   }
 };
