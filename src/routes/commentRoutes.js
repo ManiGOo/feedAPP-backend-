@@ -10,4 +10,6 @@ router.post("/", authMiddleware, createComment);
 // Get all comments for a specific post (public)
 router.get("/", getCommentsByPost);
 
+
+
 export default router;

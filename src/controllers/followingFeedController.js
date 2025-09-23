@@ -96,3 +96,53 @@ export const toggleFollow = async (req, res) => {
     res.status(500).json({ error: "Failed to toggle follow" });
   }
 };
+
+// Get list of followers for a user
+export const getFollowers = async (req, res) => {
+  const userId = parseInt(req.params.userId);
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT u.id, u.username, u.avatar_url,
+        CASE WHEN f2.follower_id IS NULL THEN false ELSE true END AS followed_by_me
+      FROM follows f
+      JOIN users u ON f.follower_id = u.id
+      LEFT JOIN follows f2
+        ON f2.follower_id = $1 AND f2.followee_id = u.id
+      WHERE f.followee_id = $1
+      `,
+      [userId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch followers" });
+  }
+};
+
+// Get list of following for a user
+export const getFollowing = async (req, res) => {
+  const userId = parseInt(req.params.userId);
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT u.id, u.username, u.avatar_url,
+        CASE WHEN f2.follower_id IS NULL THEN false ELSE true END AS followed_by_me
+      FROM follows f
+      JOIN users u ON f.followee_id = u.id
+      LEFT JOIN follows f2
+        ON f2.follower_id = $1 AND f2.followee_id = u.id
+      WHERE f.follower_id = $1
+      `,
+      [userId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch following" });
+  }
+};

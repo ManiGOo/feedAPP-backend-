@@ -7,7 +7,8 @@ import authRoutes from "./routes/authRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import commentRoutes from "./routes/commentRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
-import followingFeedRoutes from "./routes/followingFeedRoutes.js"; // ✅ follow routes
+import followingFeedRoutes from "./routes/followingFeedRoutes.js";
+import replyRoutes from "./routes/replyRoutes.js"; // ✅ import reply routes
 
 // Middleware
 import { authMiddleware } from "./middleware/auth.js";
@@ -26,7 +27,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/posts", authMiddleware, postRoutes);
 app.use("/api/posts/:postId/comments", authMiddleware, commentRoutes);
 app.use("/api/users", authMiddleware, userRoutes);
-app.use("/api/follow", authMiddleware, followingFeedRoutes); // ✅ mount follow/following routes
+app.use("/api/follow", authMiddleware, followingFeedRoutes); 
+
+// Reply routes
+app.use("/api/replies", authMiddleware, replyRoutes); // ✅ mount reply routes
 
 // Test route
 app.get("/api/me", authMiddleware, (req, res) => {

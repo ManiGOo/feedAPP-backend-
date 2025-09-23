@@ -1,15 +1,25 @@
+// src/routes/userRoutes.js
 import express from "express";
-import { getMe, updateMe } from "../controllers/userController.js";
-import { uploadAvatar, uploadAvatarMiddleware } from "../controllers/uploadController.js";
+import { getMe, updateMe, getUserProfile, getUserReplies } from "../controllers/userController.js";
 import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// profile
-router.get("/me", authMiddleware, getMe);
-router.put("/me", authMiddleware, updateMe);
+// Async handler wrapper to catch errors automatically
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
 
-// avatar upload
-router.post("/me/avatar", authMiddleware, uploadAvatarMiddleware, uploadAvatar);
+// Routes for logged-in user
+router.route("/me")
+  .get(authMiddleware, asyncHandler(getMe))
+  .put(authMiddleware, asyncHandler(updateMe));
+
+// Fetch any user's profile by ID
+router.get("/profile/:id", authMiddleware, asyncHandler(getUserProfile));
+
+// Fetch replies for a specific user
+router.get("/profile/:id/replies", authMiddleware, getUserReplies);
+
 
 export default router;
