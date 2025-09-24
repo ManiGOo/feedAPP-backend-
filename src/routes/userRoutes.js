@@ -10,16 +10,18 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+// Apply authMiddleware to all routes in this router
+router.use(authMiddleware);
+
 // Routes for logged-in user
 router.route("/me")
-  .get(authMiddleware, asyncHandler(getMe))
-  .put(authMiddleware, asyncHandler(updateMe));
+  .get(asyncHandler(getMe))
+  .put(asyncHandler(updateMe));
 
 // Fetch any user's profile by ID
-router.get("/profile/:id", authMiddleware, asyncHandler(getUserProfile));
+router.get("/profile/:id", asyncHandler(getUserProfile));
 
 // Fetch replies for a specific user
-router.get("/profile/:id/replies", authMiddleware, getUserReplies);
-
+router.get("/profile/:id/replies", asyncHandler(getUserReplies));
 
 export default router;
