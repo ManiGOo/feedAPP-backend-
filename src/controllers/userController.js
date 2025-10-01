@@ -151,33 +151,23 @@ export const getUserProfile = async (req, res) => {
   }
 };
 
-// Get replies made by a specific user
-export const getUserReplies = async (req, res) => {
+// Fetch users the current user can message (followed users)
+export const getFollowableUsers = async (req, res) => {
   try {
-    const userId = req.params.id;
+    const userId = req.user.id;
 
-    const repliesRes = await pool.query(
-      `
-      SELECT 
-        r.id AS reply_id,
-        r.content AS reply_content,
-        r.created_at AS reply_created_at,
-        r.post_id,
-        p.content AS post_content,
-        p.user_id AS post_author_id,
-        u.username AS post_author
-      FROM replies r
-      LEFT JOIN posts p ON r.post_id = p.id
-      LEFT JOIN users u ON p.user_id = u.id
-      WHERE r.user_id = $1
-      ORDER BY r.created_at DESC
-      `,
+    // Fetch users that the current user follows
+    const result = await pool.query(
+      `SELECT id, username, avatar_url
+       FROM users
+       WHERE id IN (SELECT followee_id FROM follows WHERE follower_id = $1)
+       ORDER BY username ASC`,
       [userId]
     );
 
-    res.json({ replies: repliesRes.rows });
+    res.json(result.rows);
   } catch (err) {
-    console.error("Error fetching user replies:", err.message);
-    res.status(500).json({ error: "Failed to fetch replies" });
+    console.error("Error fetching followable users:", err.message);
+    res.status(500).json({ error: "Failed to fetch users" });
   }
 };

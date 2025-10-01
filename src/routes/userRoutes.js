@@ -1,6 +1,6 @@
 // src/routes/userRoutes.js
 import express from "express";
-import { getMe, updateMe, getUserProfile, getUserReplies } from "../controllers/userController.js";
+import { getMe, updateMe, getUserProfile, getFollowableUsers } from "../controllers/userController.js";
 import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -21,7 +21,8 @@ router.route("/me")
 // Fetch any user's profile by ID
 router.get("/profile/:id", asyncHandler(getUserProfile));
 
-// Fetch replies for a specific user
-router.get("/profile/:id/replies", asyncHandler(getUserReplies));
+// Fetch followable users for DMs
+router.get("/following", asyncHandler(getFollowableUsers));
+
 
 export default router;
