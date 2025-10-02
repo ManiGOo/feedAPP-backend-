@@ -13,6 +13,7 @@ import userRoutes from "./routes/userRoutes.js";
 import followingFeedRoutes from "./routes/followingFeedRoutes.js";
 import replyRoutes from "./routes/replyRoutes.js";
 import createMessagesRouter from "./routes/messagesRoutes.js"; // UPDATED
+import clipRoutes from "./routes/clipRoutes.js";
 
 // Middleware
 import { authMiddleware } from "./middleware/auth.js";
@@ -46,6 +47,7 @@ app.use("/api/posts/:postId/comments", authMiddleware, commentRoutes);
 app.use("/api/users", authMiddleware, userRoutes);
 app.use("/api/follow", authMiddleware, followingFeedRoutes);
 app.use("/api/replies", authMiddleware, replyRoutes);
+app.use("/api/clips", authMiddleware, clipRoutes); // <--- added here
 
 // ---------------------- SOCKET.IO ----------------------
 const server = http.createServer(app);
