@@ -2,7 +2,6 @@
 import jwt from "jsonwebtoken";
 import * as messagesController from "./controllers/messagesController.js";
 import db from "./config/db.js";
-import clipsSocket from "./clipsSocket.js";
 
 export default (io) => {
   io.use((socket, next) => {

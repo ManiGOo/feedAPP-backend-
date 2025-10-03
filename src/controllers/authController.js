@@ -1,8 +1,9 @@
+// src/controllers/authController.js
 import pool from "../config/db.js";
 import jwt from "jsonwebtoken";
 import argon2 from "argon2";
 
-// Helper to generate tokens
+// -------------------- TOKEN HELPERS --------------------
 const generateAccessToken = (user) => {
   return jwt.sign(
     { id: user.id, username: user.username },
@@ -27,6 +28,8 @@ const generateRefreshToken = async (user) => {
   return refreshToken;
 };
 
+// -------------------- CONTROLLERS --------------------
+
 // Register
 export const register = async (req, res) => {
   const { username, email, password } = req.body;
@@ -34,7 +37,9 @@ export const register = async (req, res) => {
     const hashedPassword = await argon2.hash(password);
 
     const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email`,
+      `INSERT INTO users (username, email, password_hash)
+       VALUES ($1, $2, $3)
+       RETURNING id, username, email`,
       [username, email, hashedPassword]
     );
 
@@ -113,58 +118,5 @@ export const logout = async (req, res) => {
   } catch (err) {
     console.error("Error logging out:", err.message);
     res.status(500).json({ error: "Logout failed" });
-  }
-};
-
-export const getMe = async (req, res) => {
-  try {
-    const userResult = await pool.query(
-      `SELECT id, username, email, bio, avatar_url 
-       FROM users WHERE id = $1`,
-      [req.user.id]
-    );
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const postsResult = await pool.query(
-      `SELECT id, content, likes, created_at 
-       FROM posts WHERE user_id = $1 
-       ORDER BY created_at DESC`,
-      [req.user.id]
-    );
-
-    res.json({
-      user: userResult.rows[0],
-      posts: postsResult.rows,
-    });
-  } catch (err) {
-    console.error("Error fetching profile:", err.message);
-    res.status(500).json({ error: "Failed to fetch profile" });
-  }
-};
-
-// UPDATE profile
-export const updateMe = async (req, res) => {
-  const { username, email, bio, avatar_url } = req.body;
-
-  try {
-    const result = await pool.query(
-      `UPDATE users 
-       SET username = $1, email = $2, bio = $3, avatar_url = $4
-       WHERE id = $5
-       RETURNING id, username, email, bio, avatar_url`,
-      [username, email, bio, avatar_url, req.user.id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    res.json({ user: result.rows[0] });
-  } catch (err) {
-    console.error("Error updating profile:", err.message);
-    res.status(500).json({ error: "Failed to update profile" });
   }
 };

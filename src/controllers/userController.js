@@ -1,5 +1,7 @@
 import pool from "../config/db.js";
 import argon2 from "argon2";
+import cloudinary from "../config/cloudinary.js";
+
 
 // Helper to fetch posts by a user with like counts, liked_by_me info, and media
 const getPostsByUser = async (userId, currentUserId) => {
@@ -65,9 +67,9 @@ export const getMe = async (req, res) => {
 export const updateMe = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { username, email, bio, avatar_url, password } = req.body;
+    const { username, email, bio, password, removeAvatar } = req.body;
 
-    // Validation
+    // Validate text fields
     if (username && (username.length < 3 || username.length > 30)) {
       return res.status(400).json({ error: "Username must be 3-30 characters" });
     }
@@ -78,6 +80,25 @@ export const updateMe = async (req, res) => {
     // Hash password if provided
     let passwordHash;
     if (password) passwordHash = await argon2.hash(password);
+
+    // Handle avatar upload or removal
+    let avatar_url;
+    if (req.file) {
+      // Upload new avatar to Cloudinary
+      avatar_url = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "avatars", resource_type: "image" },
+          (err, result) => {
+            if (err) reject(err);
+            else resolve(result.secure_url);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+    } else if (removeAvatar === "true") {
+      // Explicit removal request
+      avatar_url = null;
+    }
 
     // Build update query dynamically
     const fields = [];
@@ -90,21 +111,29 @@ export const updateMe = async (req, res) => {
     if (avatar_url !== undefined) { fields.push(`avatar_url = $${index++}`); values.push(avatar_url); }
     if (passwordHash) { fields.push(`password_hash = $${index++}`); values.push(passwordHash); }
 
-    if (fields.length === 0) return res.status(400).json({ error: "No fields to update" });
+    if (fields.length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
 
-    values.push(userId); // WHERE clause
+    values.push(userId);
+
     const result = await pool.query(
-      `UPDATE users SET ${fields.join(", ")} WHERE id = $${index} RETURNING id, username, email, bio, avatar_url`,
+      `UPDATE users 
+       SET ${fields.join(", ")} 
+       WHERE id = $${index} 
+       RETURNING id, username, email, bio, avatar_url`,
       values
     );
 
     res.json({ user: result.rows[0] });
   } catch (err) {
     console.error("Error updating profile:", err.stack);
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Username or email already taken" });
+    }
     res.status(500).json({ error: "Failed to update profile" });
   }
 };
-
 // Fetch any user's profile by ID
 export const getUserProfile = async (req, res) => {
   try {
@@ -151,23 +180,33 @@ export const getUserProfile = async (req, res) => {
   }
 };
 
-// Fetch users the current user can message (followed users)
-export const getFollowableUsers = async (req, res) => {
+// Get replies made by a specific user
+export const getUserReplies = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.params.id;
 
-    // Fetch users that the current user follows
-    const result = await pool.query(
-      `SELECT id, username, avatar_url
-       FROM users
-       WHERE id IN (SELECT followee_id FROM follows WHERE follower_id = $1)
-       ORDER BY username ASC`,
+    const repliesRes = await pool.query(
+      `
+      SELECT 
+        r.id AS reply_id,
+        r.content AS reply_content,
+        r.created_at AS reply_created_at,
+        r.post_id,
+        p.content AS post_content,
+        p.user_id AS post_author_id,
+        u.username AS post_author
+      FROM replies r
+      LEFT JOIN posts p ON r.post_id = p.id
+      LEFT JOIN users u ON p.user_id = u.id
+      WHERE r.user_id = $1
+      ORDER BY r.created_at DESC
+      `,
       [userId]
     );
 
-    res.json(result.rows);
+    res.json({ replies: repliesRes.rows });
   } catch (err) {
-    console.error("Error fetching followable users:", err.message);
-    res.status(500).json({ error: "Failed to fetch users" });
+    console.error("Error fetching user replies:", err.message);
+    res.status(500).json({ error: "Failed to fetch replies" });
   }
 };

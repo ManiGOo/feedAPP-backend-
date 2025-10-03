@@ -54,6 +54,7 @@ export const getPosts = async (req, res) => {
 };
 
 // Create a post with optional image/video
+// src/controllers/postController.js
 export const createPost = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -62,12 +63,14 @@ export const createPost = async (req, res) => {
     let mediaUrl = null;
     let mediaType = null;
 
+    // Pick the uploaded file (image or video)
     const file = req.files?.image?.[0] || req.files?.video?.[0];
 
     if (file) {
+      // Upload to Cloudinary
       const result = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { folder: "posts", resource_type: "auto" },
+          { folder: "posts", resource_type: "auto" }, // auto detects image/video
           (err, uploadResult) => {
             if (err) return reject(err);
             resolve(uploadResult);
@@ -78,12 +81,14 @@ export const createPost = async (req, res) => {
 
       mediaUrl = result.secure_url;
       mediaType = file.mimetype.startsWith("video/") ? "video" : "image";
+      console.log("Uploaded media URL:", mediaUrl);
     }
 
+    // Insert post into DB
     const dbRes = await pool.query(
       `INSERT INTO posts (user_id, content, media_url, media_type)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, user_id, content, media_url, media_type`,
+       RETURNING id, user_id, content, media_url, media_type, created_at`,
       [userId, content, mediaUrl, mediaType]
     );
 

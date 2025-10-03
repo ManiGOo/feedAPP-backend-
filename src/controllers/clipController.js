@@ -201,15 +201,19 @@ export const commentClip = (io) => async (req, res) => {
       );
 
       newComment = {
-        ...comment,
+        id: comment.id,
+        clip_id: comment.clip_id,
+        user_id: comment.user_id,
         username: userRows[0].username,
         avatar_url: userRows[0].avatar_url || "/default-avatar.png",
+        content: comment.content,
+        created_at: comment.created_at,
       };
     } finally {
       client.release();
     }
 
-    io.emit("newClipComment", { clipId, comment: newComment });
+    io.emit("newClipComment", newComment); // frontend can read avatar_url directly
     res.status(201).json(newComment);
   } catch (err) {
     console.error("❌ Error commenting on clip:", err.message);
@@ -229,7 +233,7 @@ export const getClipComments = async (req, res) => {
     let comments;
     try {
       const { rows } = await client.query(
-        `SELECT cc.id, cc.content, cc.created_at,
+        `SELECT cc.id, cc.clip_id, cc.user_id, cc.content, cc.created_at,
                 u.username, u.avatar_url
          FROM clip_comments cc
          JOIN users u ON u.id = cc.user_id
@@ -239,8 +243,13 @@ export const getClipComments = async (req, res) => {
       );
 
       comments = rows.map((c) => ({
-        ...c,
+        id: c.id,
+        clip_id: c.clip_id,
+        user_id: c.user_id,
+        username: c.username,
         avatar_url: c.avatar_url || "/default-avatar.png",
+        content: c.content,
+        created_at: c.created_at,
       }));
     } finally {
       client.release();
