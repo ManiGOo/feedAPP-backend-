@@ -1,3 +1,4 @@
+// src/server.js
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -12,8 +13,8 @@ import commentRoutes from "./routes/commentRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import followingFeedRoutes from "./routes/followingFeedRoutes.js";
 import replyRoutes from "./routes/replyRoutes.js";
-import createMessagesRouter from "./routes/messagesRoutes.js"; // UPDATED
-import clipRoutes from "./routes/clipRoutes.js";
+import createMessagesRouter from "./routes/messagesRoutes.js"; // Socket-enabled
+import createClipsRouter from "./routes/clipRoutes.js";         // Socket-enabled
 
 // Middleware
 import { authMiddleware } from "./middleware/auth.js";
@@ -35,19 +36,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use(morgan("dev")); // request logging
-
-// ---------------------- ROUTES ----------------------
-// Public
-app.use("/api/auth", authRoutes);
-
-// Protected
-app.use("/api/posts", authMiddleware, postRoutes);
-app.use("/api/posts/:postId/comments", authMiddleware, commentRoutes);
-app.use("/api/users", authMiddleware, userRoutes);
-app.use("/api/follow", authMiddleware, followingFeedRoutes);
-app.use("/api/replies", authMiddleware, replyRoutes);
-app.use("/api/clips", authMiddleware, clipRoutes); // <--- added here
+app.use(morgan("dev"));
 
 // ---------------------- SOCKET.IO ----------------------
 const server = http.createServer(app);
@@ -61,16 +50,28 @@ const io = new Server(server, {
   },
 });
 
-// Initialize Socket.IO handler
+// Initialize socket.io logic
 socketHandler(io);
 
-// Messages routes need io for socket emits
+// ---------------------- ROUTES ----------------------
+// Public routes
+app.use("/api/auth", authRoutes);
+
+// Protected routes
+app.use("/api/posts", authMiddleware, postRoutes);
+app.use("/api/posts/:postId/comments", authMiddleware, commentRoutes);
+app.use("/api/users", authMiddleware, userRoutes);
+app.use("/api/follow", authMiddleware, followingFeedRoutes);
+app.use("/api/replies", authMiddleware, replyRoutes);
+
+// Clips routes (requires socket)
+app.use("/api/clips", authMiddleware, createClipsRouter(io));
+
+// Messages routes (requires socket)
 app.use("/api/messages", authMiddleware, createMessagesRouter(io));
 
-// Test route
+// ---------------------- TEST ROUTES ----------------------
 app.get("/api/me", authMiddleware, (req, res) => res.json({ user: req.user }));
-
-// Health check
 app.get("/", (req, res) => res.send("API is running"));
 
 // ---------------------- ERROR HANDLING ----------------------
@@ -80,5 +81,5 @@ app.use((err, req, res, next) => {
 });
 
 // ---------------------- START SERVER ----------------------
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT ;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

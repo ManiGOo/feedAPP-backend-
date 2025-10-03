@@ -1,35 +1,29 @@
 import express from "express";
 import multer from "multer";
-import { authMiddleware } from "../middleware/auth.js";
-import {
-  getClips,
-  getClipById,
-  createClip,
-  toggleClipLike,
-  deleteClip,
-  getClipComments,
-  createClipComment,
-} from "../controllers/clipController.js";
+import * as clipController from "../controllers/clipController.js";
 
-const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage() }); // memory storage for Cloudinary
 
-// Action logger
-const logAction = (action) => (req, res, next) => {
-  const user = req.user?.id || "Guest";
-  console.log(`${typeof action === "function" ? action(req) : action} called by user: ${user}`);
-  next();
+const createClipsRouter = (io) => {
+  const router = express.Router();
+
+  // GET all clips
+  router.get("/", clipController.getClips);
+
+  // CREATE a new clip
+  router.post("/", upload.single("video"), clipController.createClip(io));
+
+  // LIKE a clip
+  router.post("/:clipId/like", clipController.likeClip(io));
+
+  // UNLIKE a clip
+  router.post("/:clipId/unlike", clipController.unlikeClip(io));
+
+  // COMMENT on a clip
+  router.post("/:clipId/comment", clipController.commentClip(io));
+  router.get("/:clipId/comments", clipController.getClipComments);
+
+  return router;
 };
 
-// Clips
-router.get("/", authMiddleware, logAction("GET /clips"), getClips);
-router.get("/:id", authMiddleware, logAction((req) => `GET /clips/${req.params.id}`), getClipById);
-router.post("/", authMiddleware, upload.single("video"), logAction("POST /clips"), createClip);
-router.delete("/:id", authMiddleware, logAction((req) => `DELETE /clips/${req.params.id}`), deleteClip);
-router.post("/:clipId/like", authMiddleware, logAction((req) => `POST /clips/${req.params.clipId}/like`), toggleClipLike);
-
-// Comments
-router.get("/:clipId/comments", authMiddleware, logAction((req) => `GET /clips/${req.params.clipId}/comments`), getClipComments);
-router.post("/:clipId/comments", authMiddleware, logAction((req) => `POST /clips/${req.params.clipId}/comments`), createClipComment);
-
-export default router;
+export default createClipsRouter;
