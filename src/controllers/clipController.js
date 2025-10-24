@@ -1,4 +1,4 @@
-import { pool } from "../config/db.js";
+import pool from "../config/db.js";
 import { bucket } from "../config/gcs.js";
 import { v4 as uuidv4 } from "uuid";
 

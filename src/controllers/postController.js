@@ -1,6 +1,6 @@
 import { bucket } from "../config/gcs.js";
 import { v4 as uuidv4 } from "uuid";
-import { pool } from "../config/db.js";
+import pool from "../config/db.js";
 
 // Get all posts (with author info, likes, comments count, follow status)
 export const getPosts = async (req, res) => {
