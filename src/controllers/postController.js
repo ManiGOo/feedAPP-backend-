@@ -58,13 +58,10 @@ export const createPost = async (req, res) => {
   try {
     const userId = req.user.id;
     const content = req.body.content || "";
-
     let mediaUrl = null;
     let mediaType = null;
 
-    // Pick the uploaded file (image or video)
     const file = req.files?.image?.[0] || req.files?.video?.[0];
-
     if (file) {
       const sanitizedFileName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
       const fileName = `posts/${uuidv4()}_${sanitizedFileName}`;
@@ -74,23 +71,26 @@ export const createPost = async (req, res) => {
         metadata: { contentType: file.mimetype },
       });
 
-      await new Promise((resolve, reject) => {
-        blobStream.on("error", (err) => {
-          console.error("GCS upload failed:", err.message);
-          reject(err);
+      try {
+        await new Promise((resolve, reject) => {
+          blobStream.on("error", (err) => {
+            console.error("GCS upload failed:", err.message);
+            reject(err);
+          });
+          blobStream.on("finish", () => {
+            console.log("GCS upload success:", fileName);
+            resolve();
+          });
+          blobStream.end(file.buffer);
         });
-        blobStream.on("finish", () => {
-          console.log("GCS upload success:", fileName);
-          resolve();
-        });
-        blobStream.end(file.buffer);
-      });
-
-      mediaUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-      mediaType = file.mimetype.startsWith("video/") ? "video" : "image";
+        mediaUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+        mediaType = file.mimetype.startsWith("video/") ? "video" : "image";
+      } catch (err) {
+        console.error("GCS upload error:", err.message);
+        return res.status(500).json({ error: `Failed to upload file to GCS: ${err.message}` });
+      }
     }
 
-    // Insert post into DB
     const dbRes = await pool.query(
       `INSERT INTO posts (user_id, content, media_url, media_type)
        VALUES ($1, $2, $3, $4)
@@ -98,7 +98,6 @@ export const createPost = async (req, res) => {
       [userId, content, mediaUrl, mediaType]
     );
 
-    // Fetch author info for response
     const userRes = await pool.query(
       `SELECT username, avatar_url AS author_avatar FROM users WHERE id = $1`,
       [userId]

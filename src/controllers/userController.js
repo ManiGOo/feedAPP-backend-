@@ -1,10 +1,10 @@
 import pool from "../config/db.js";
 import argon2 from "argon2";
-import cloudinary from "../config/cloudinary.js";
+import { bucket } from "../config/gcs.js"; // Import GCS bucket configuration
+import { v4 as uuidv4 } from "uuid";
 
 // Helper to fetch posts by a user with likes and comments
 const getPostsByUser = async (userId, currentUserId) => {
-  // First fetch posts with like info
   const postsResult = await pool.query(
     `
     SELECT 
@@ -30,7 +30,6 @@ const getPostsByUser = async (userId, currentUserId) => {
 
   const posts = postsResult.rows;
 
-  // Fetch comments for all posts in one query
   if (posts.length === 0) return posts;
 
   const postIds = posts.map((p) => p.id);
@@ -46,7 +45,6 @@ const getPostsByUser = async (userId, currentUserId) => {
     [postIds]
   );
 
-  // Group comments by post_id
   const commentsByPost = {};
   commentsRes.rows.forEach((c) => {
     if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
@@ -60,7 +58,6 @@ const getPostsByUser = async (userId, currentUserId) => {
     });
   });
 
-  // Attach comments to posts
   return posts.map((p) => ({
     ...p,
     comments: commentsByPost[p.id] || [],
@@ -82,10 +79,10 @@ export const getMe = async (req, res) => {
       JOIN posts p ON c.post_id = p.id
       WHERE c.user_id = $1
       ORDER BY c.created_at DESC
-      `, [userId]
+      `,
+      [userId]
     );
 
-    // Fetch user info
     const userResult = await pool.query(
       `SELECT id, username, email, bio, avatar_url FROM users WHERE id = $1`,
       [userId]
@@ -95,7 +92,6 @@ export const getMe = async (req, res) => {
     }
     const user = userResult.rows[0];
 
-    // Follower/following counts
     const [followerRes, followingRes] = await Promise.all([
       pool.query("SELECT COUNT(*) AS followers_count FROM follows WHERE followee_id = $1", [userId]),
       pool.query("SELECT COUNT(*) AS following_count FROM follows WHERE follower_id = $1", [userId])
@@ -103,7 +99,6 @@ export const getMe = async (req, res) => {
     user.followersCount = parseInt(followerRes.rows[0].followers_count, 10);
     user.followingCount = parseInt(followingRes.rows[0].following_count, 10);
 
-    // Fetch posts
     const posts = await getPostsByUser(userId, userId);
     const comments = commentsRes.rows.map(c => ({
       id: c.id,
@@ -144,19 +139,47 @@ export const updateMe = async (req, res) => {
     // Handle avatar upload or removal
     let avatar_url;
     if (req.file) {
-      // Upload new avatar to Cloudinary
-      avatar_url = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "avatars", resource_type: "image" },
-          (err, result) => {
-            if (err) reject(err);
-            else resolve(result.secure_url);
-          }
-        );
-        stream.end(req.file.buffer);
+      // Upload new avatar to GCS
+      const sanitizedFileName = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const fileName = `avatars/${uuidv4()}_${sanitizedFileName}`;
+      console.log("Uploading to GCS:", fileName);
+      const blob = bucket.file(fileName);
+      const blobStream = blob.createWriteStream({
+        metadata: { contentType: req.file.mimetype },
       });
+
+      try {
+        await new Promise((resolve, reject) => {
+          blobStream.on("error", (err) => {
+            console.error("GCS upload failed:", err.message);
+            reject(err);
+          });
+          blobStream.on("finish", () => {
+            console.log("GCS upload success:", fileName);
+            resolve();
+          });
+          blobStream.end(req.file.buffer);
+        });
+        avatar_url = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      } catch (err) {
+        console.error("GCS upload error:", err.message);
+        return res.status(500).json({ error: `Failed to upload avatar to GCS: ${err.message}` });
+      }
     } else if (removeAvatar === "true") {
-      // Explicit removal request
+      // Delete existing avatar from GCS if it exists
+      const currentUser = await pool.query(
+        "SELECT avatar_url FROM users WHERE id = $1",
+        [userId]
+      );
+      if (currentUser.rows[0]?.avatar_url) {
+        const fileName = currentUser.rows[0].avatar_url.split(`${bucket.name}/`)[1];
+        try {
+          await bucket.file(fileName).delete();
+          console.log("Deleted GCS avatar:", fileName);
+        } catch (err) {
+          console.error("Failed to delete GCS avatar:", err.message);
+        }
+      }
       avatar_url = null;
     }
 
@@ -165,11 +188,26 @@ export const updateMe = async (req, res) => {
     const values = [];
     let index = 1;
 
-    if (username) { fields.push(`username = $${index++}`); values.push(username); }
-    if (email) { fields.push(`email = $${index++}`); values.push(email); }
-    if (bio !== undefined) { fields.push(`bio = $${index++}`); values.push(bio); }
-    if (avatar_url !== undefined) { fields.push(`avatar_url = $${index++}`); values.push(avatar_url); }
-    if (passwordHash) { fields.push(`password_hash = $${index++}`); values.push(passwordHash); }
+    if (username) {
+      fields.push(`username = $${index++}`);
+      values.push(username);
+    }
+    if (email) {
+      fields.push(`email = $${index++}`);
+      values.push(email);
+    }
+    if (bio !== undefined) {
+      fields.push(`bio = $${index++}`);
+      values.push(bio);
+    }
+    if (avatar_url !== undefined) {
+      fields.push(`avatar_url = $${index++}`);
+      values.push(avatar_url);
+    }
+    if (passwordHash) {
+      fields.push(`password_hash = $${index++}`);
+      values.push(passwordHash);
+    }
 
     if (fields.length === 0) {
       return res.status(400).json({ error: "No fields to update" });
@@ -191,7 +229,7 @@ export const updateMe = async (req, res) => {
     if (err.code === "23505") {
       return res.status(400).json({ error: "Username or email already taken" });
     }
-    res.status(500).json({ error: "Failed to update profile" });
+    res.status(500).json({ error: `Failed to update profile: ${err.message}` });
   }
 };
 
@@ -201,7 +239,6 @@ export const getUserProfile = async (req, res) => {
     const currentUserId = req.user?.id;
     const profileId = req.params.id;
 
-    // Fetch user info
     const userResult = await pool.query(
       "SELECT id, username, bio, avatar_url FROM users WHERE id = $1",
       [profileId]
@@ -211,7 +248,6 @@ export const getUserProfile = async (req, res) => {
     }
     const user = userResult.rows[0];
 
-    // Follower/following counts
     const [followerRes, followingRes] = await Promise.all([
       pool.query("SELECT COUNT(*) AS followers_count FROM follows WHERE followee_id = $1", [profileId]),
       pool.query("SELECT COUNT(*) AS following_count FROM follows WHERE follower_id = $1", [profileId])
@@ -219,7 +255,6 @@ export const getUserProfile = async (req, res) => {
     const followersCount = parseInt(followerRes.rows[0].followers_count, 10);
     const followingCount = parseInt(followingRes.rows[0].following_count, 10);
 
-    // Check if current user follows this profile
     let isFollowedByMe = false;
     if (currentUserId) {
       const followRes = await pool.query(
@@ -229,10 +264,8 @@ export const getUserProfile = async (req, res) => {
       isFollowedByMe = followRes.rows.length > 0;
     }
 
-    // Fetch posts with likes AND comments
     const posts = await getPostsByUser(profileId, currentUserId);
 
-    // Fetch comments by this user
     const commentsRes = await pool.query(
       `
       SELECT c.id, c.content, c.created_at, c.post_id,
