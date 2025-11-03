@@ -1,99 +1,110 @@
+// routes/postRouter.js
 import express from "express";
 import multer from "multer";
 import { authMiddleware } from "../middleware/auth.js";
 import commentRoutes from "./commentRoutes.js";
 import {
   getPosts,
+  getFollowingPosts,
   createPost,
-  toggleLike,
   getPostById,
-  deletePost,
   updatePost,
+  deletePost,
+  toggleLike,
+  repost,
+  undoRepost,
+  bookmark,
+  unbookmark,
+  trackView,
 } from "../controllers/postController.js";
 
 const router = express.Router();
+
+// === MULTER CONFIG ===
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (req, file, cb) => {
-    console.log("Multer fileFilter:", {
-      fieldname: file.fieldname,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      encoding: file.encoding,
-    });
-    if (/image\/|video\/mp4|video\/quicktime/.test(file.mimetype)) {
-      return cb(null, true);
-    }
-    cb(new Error("Only images, MP4, or MOV files are allowed"));
+    const allowed = /image\/|video\/(mp4|quicktime|webm|x-matroska)/;
+    cb(null, allowed.test(file.mimetype));
   },
 });
 
-const uploadMiddleware = (req, res, next) => {
-  console.log("Upload middleware - Request headers:", {
-    contentType: req.headers["content-type"],
-    contentLength: req.headers["content-length"],
-    authorization: req.headers.authorization,
-  });
-  console.log("Upload middleware - Request body (pre-multer):", req.body);
-  upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ])(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      console.log("Multer error:", err.message, err);
-      return res.status(400).json({ error: `Multer error: ${err.message}` });
-    } else if (err) {
-      console.log("File filter error:", err.message, err);
-      return res.status(400).json({ error: err.message });
-    }
-    console.log("Multer parsed files:", req.files);
-    console.log("Multer parsed body:", req.body);
-    if (!req.files || (!req.files.image && !req.files.video)) {
-      console.log("No files parsed by multer");
-    }
-    next();
-  });
-};
+const uploadMedia = upload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "video", maxCount: 1 },
+]);
 
-// Middleware to log user actions
-const logAction = (action) => (req, res, next) => {
-  console.log(`${action} called by user:`, req.user?.id || "unauthenticated");
+// === MULTER ERROR HANDLER ===
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "File too large. Max 50MB." });
+    }
+    return res.status(400).json({ error: `Upload error: ${err.message}` });
+  }
+  if (err) {
+    return res.status(400).json({ error: err.message });
+  }
   next();
 };
 
-// GET all posts
-router.get("/", authMiddleware, logAction("GET /posts"), getPosts);
+// === ROUTES ===
 
-// GET a single post (with comments, no auth required)
-router.get("/:id", logAction((req) => `GET /posts/${req.params.id}`), getPostById);
+// 1. GET FEED: /api/posts?feed=following or /api/posts
+router.get(
+  "/",
+  authMiddleware,
+  (req, res) => {
+    if (req.query.feed === "following") {
+      return getFollowingPosts(req, res);
+    }
+    return getPosts(req, res);
+  }
+);
 
-// POST a new post (image/video optional)
+// 2. GET SINGLE POST: /api/posts/:id
+router.get("/:id", authMiddleware, getPostById);
+
+// 3. CREATE POST: /api/posts (multipart/form-data)
 router.post(
   "/",
   authMiddleware,
-  uploadMiddleware,
-  logAction("POST /posts"),
+  uploadMedia,
+  handleMulterError,
   createPost
 );
 
-// DELETE a post (only owner)
-router.delete("/:id", authMiddleware, logAction((req) => `DELETE /posts/${req.params.id}`), deletePost);
-
-// Toggle like
-router.post("/:postId/like", authMiddleware, logAction((req) => `POST /posts/${req.params.postId}/like`), toggleLike);
-
-// Mount comment routes under /:postId/comments
-router.use("/:postId/comments", commentRoutes);
-
-// PUT update post (only owner)
+// 4. UPDATE POST: /api/posts/:id
 router.put(
   "/:id",
   authMiddleware,
-  uploadMiddleware,
-  logAction((req) => `PUT /posts/${req.params.id}`),
+  uploadMedia,
+  handleMulterError,
   updatePost
 );
+
+// 5. DELETE POST: /api/posts/:id
+router.delete("/:id", authMiddleware, deletePost);
+
+// === INTERACTIONS ===
+
+// Like
+router.post("/:postId/like", authMiddleware, toggleLike);
+
+// Repost
+router.post("/:postId/repost", authMiddleware, repost);
+router.delete("/:postId/repost", authMiddleware, undoRepost);
+
+// Bookmark
+router.post("/:postId/bookmark", authMiddleware, bookmark);
+router.delete("/:postId/bookmark", authMiddleware, unbookmark);
+
+// View (optional analytics)
+router.post("/:postId/view", authMiddleware, trackView);
+
+// === COMMENTS SUB-ROUTE ===
+router.use("/:postId/comments", commentRoutes);
 
 export default router;

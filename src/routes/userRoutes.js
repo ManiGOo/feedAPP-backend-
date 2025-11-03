@@ -1,3 +1,4 @@
+// routers/userRouter.js
 import express from "express";
 import multer from "multer";
 import {
@@ -24,7 +25,10 @@ router.use(authMiddleware);
 router
   .route("/me")
   .get(asyncHandler(getMe))
-  .put(upload.single("avatar"), asyncHandler(updateMe));
+  .put(
+    upload.fields([{ name: "avatar", maxCount: 1 }]), // Always parse FormData
+    asyncHandler(updateMe)
+  );
 
 // -------------------- Get any user profile --------------------
 router.get("/profile/:id", asyncHandler(getUserProfile));

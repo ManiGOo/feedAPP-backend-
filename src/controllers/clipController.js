@@ -316,3 +316,44 @@ export const deleteClip = (io) => async (req, res) => {
     res.status(500).json({ error: "Failed to delete clip" });
   }
 };
+
+export const getClipById = async (req, res) => {
+  const { clipId } = req.params;
+  const viewerId = req.user?.id || 0;
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT 
+         c.id, c.user_id, c.title, c.video_url, c.created_at,
+         u.username, u.avatar_url,
+         (SELECT COUNT(*) FROM clip_likes cl WHERE cl.clip_id = c.id) AS like_count,
+         (SELECT COUNT(*) FROM clip_comments cc WHERE cc.clip_id = c.id) AS comments_count,
+         EXISTS(SELECT 1 FROM clip_likes cl WHERE cl.clip_id = c.id AND cl.user_id = $1) AS liked_by_me,
+         EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.followee_id = c.user_id) AS is_followed_author
+       FROM clips c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.id = $2`,
+      [viewerId, clipId]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ error: "Clip not found" });
+
+    const clip = rows[0];
+    res.json({
+      id: clip.id,
+      title: clip.title,
+      video_url: clip.video_url,
+      created_at: clip.created_at,
+      author_id: clip.user_id,
+      author: clip.username,
+      avatar_url: clip.avatar_url || "/default-avatar.png",
+      like_count: parseInt(clip.like_count),
+      comments_count: parseInt(clip.comments_count),
+      liked_by_me: clip.liked_by_me,
+      is_followed_author: clip.is_followed_author,
+    });
+  } catch (err) {
+    console.error("getClipById error:", err);
+    res.status(500).json({ error: "Failed to fetch clip" });
+  }
+};
