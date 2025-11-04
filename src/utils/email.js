@@ -2,20 +2,15 @@
 import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,  // ← CHANGED: Use 587 (STARTTLS) instead of 465 (SSL) – better for cloud
-  secure: false,  // ← true for 465, false for other ports
+  host: "smtp.gmail.com",
+  port: 587, // Use 587 for STARTTLS
+  secure: false, // Use false for STARTTLS (port 587)
   auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS,  // Your App Password
+    user: process.env.GMAIL_USER, // Your Gmail address
+    pass: process.env.GMAIL_PASS, // Your Gmail App Password
   },
-  // ← ADDED: Increase timeouts for Render's slow network
-  connectionTimeout: 60000,  // 60 seconds (default: 10s)
-  greetingTimeout: 30000,    // 30 seconds
-  socketTimeout: 60000,      // 60 seconds
-  // ← ADDED: Ignore TLS cert errors (helps on some clouds)
   tls: {
-    rejectUnauthorized: false,
+    rejectUnauthorized: true, // Ensure TLS certificates are verified
   },
 });
 
