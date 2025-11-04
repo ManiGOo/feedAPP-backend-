@@ -1,0 +1,14 @@
+[
+  {
+    "origin": ["http://localhost:5173"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Range",
+      "Content-Range",
+      "Accept-Ranges"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

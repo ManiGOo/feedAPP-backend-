@@ -9,6 +9,7 @@ import {
 } from "../controllers/userController.js";
 import { authMiddleware } from "../middleware/auth.js";
 
+
 const router = express.Router();
 
 // -------------------- Async handler --------------------
@@ -35,5 +36,8 @@ router.get("/profile/:id", asyncHandler(getUserProfile));
 
 // -------------------- Search users --------------------
 router.get("/search", asyncHandler(searchUsers));
+
+
+
 
 export default router;

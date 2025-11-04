@@ -357,3 +357,49 @@ export const getClipById = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch clip" });
   }
 };
+
+// -------------------------
+// Helper: getClipsByUser
+// -------------------------
+export const getClipsByUser = async (targetUserId, viewerId = 0) => {
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        c.id,
+        c.title,
+        c.video_url,
+        c.created_at,
+        u.id AS author_id,
+        u.username AS author,
+        u.avatar_url AS author_avatar,
+        (SELECT COUNT(*) FROM clip_likes cl WHERE cl.clip_id = c.id) AS like_count,
+        (SELECT COUNT(*) FROM clip_comments cc WHERE cc.clip_id = c.id) AS comments_count,
+        EXISTS(SELECT 1 FROM clip_likes cl WHERE cl.clip_id = c.id AND cl.user_id = $2) AS liked_by_me,
+        EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $2 AND f.followee_id = c.user_id) AS is_followed_author
+      FROM clips c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.user_id = $1
+      ORDER BY c.created_at DESC
+      `,
+      [targetUserId, viewerId]
+    );
+
+    return rows.map((c) => ({
+      id: c.id,
+      title: c.title,
+      video_url: c.video_url,
+      created_at: c.created_at,
+      author_id: c.author_id,
+      author: c.author,
+      avatar_url: c.author_avatar || "/default-avatar.png",
+      like_count: parseInt(c.like_count, 10),
+      comments_count: parseInt(c.comments_count, 10),
+      liked_by_me: c.liked_by_me,
+      is_followed_author: c.is_followed_author,
+    }));
+  } catch (err) {
+    console.error("getClipsByUser error:", err);
+    return [];
+  }
+};
