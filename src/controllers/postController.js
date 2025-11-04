@@ -4,10 +4,7 @@ import { bucket } from "../config/gcs.js";
 import { v4 as uuidv4 } from "uuid";
 
 /* ==============================================================
-   HELPER: GET POSTS WITH FULL STATS
-   - filterClause: WHERE / JOIN conditions
-   - orderClause: ORDER BY + LIMIT
-   - params: [..., viewerId] (viewerId is last)
+   HELPER: GET POSTS WITH FULL STATS (NO LIMIT)
    ============================================================== */
 const getPostsWithStats = async (filterClause, orderClause, params) => {
   const viewerId = params[params.length - 1];
@@ -77,15 +74,15 @@ const getPostsWithStats = async (filterClause, orderClause, params) => {
 };
 
 /* ==============================================================
-   GET GLOBAL FEED (Original + Reposts)
+   GET GLOBAL FEED — ALL POSTS (NO LIMIT)
    ============================================================== */
 export const getPosts = async (req, res) => {
   const viewerId = req.user?.id || 0;
 
   try {
     const posts = await getPostsWithStats(
-      `WHERE 1=1`, // Include both original and reposts
-      `ORDER BY GREATEST(p.created_at, COALESCE(p.repost_at, p.created_at)) DESC LIMIT 20`,
+      `WHERE 1=1`,
+      `ORDER BY GREATEST(p.created_at, COALESCE(p.repost_at, p.created_at)) DESC`, // NO LIMIT
       [viewerId]
     );
     res.json(posts);
@@ -96,7 +93,7 @@ export const getPosts = async (req, res) => {
 };
 
 /* ==============================================================
-   GET FOLLOWING FEED
+   GET FOLLOWING FEED — ALL POSTS (NO LIMIT)
    ============================================================== */
 export const getFollowingPosts = async (req, res) => {
   const viewerId = req.user?.id || 0;
@@ -104,7 +101,7 @@ export const getFollowingPosts = async (req, res) => {
   try {
     const posts = await getPostsWithStats(
       `JOIN follows f ON f.followee_id = p.user_id AND f.follower_id = $1`,
-      `ORDER BY GREATEST(p.created_at, COALESCE(p.repost_at, p.created_at)) DESC`,
+      `ORDER BY GREATEST(p.created_at, COALESCE(p.repost_at, p.created_at)) DESC`, // NO LIMIT
       [viewerId, viewerId]
     );
     res.json(posts);

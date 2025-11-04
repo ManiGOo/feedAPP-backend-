@@ -9,7 +9,6 @@ import {
 } from "../controllers/userController.js";
 import { authMiddleware } from "../middleware/auth.js";
 
-
 const router = express.Router();
 
 // -------------------- Async handler --------------------
@@ -27,7 +26,7 @@ router
   .route("/me")
   .get(asyncHandler(getMe))
   .put(
-    upload.fields([{ name: "avatar", maxCount: 1 }]), // Always parse FormData
+    upload.single("avatar"),  // ← Changed to single (like clips/video)
     asyncHandler(updateMe)
   );
 
@@ -36,8 +35,5 @@ router.get("/profile/:id", asyncHandler(getUserProfile));
 
 // -------------------- Search users --------------------
 router.get("/search", asyncHandler(searchUsers));
-
-
-
 
 export default router;

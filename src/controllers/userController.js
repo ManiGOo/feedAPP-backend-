@@ -162,39 +162,64 @@ export const getMe = async (req, res) => {
   }
 };
 
-// UPDATE /me
+// UPDATE /me (adapted from working createClip upload)
 export const updateMe = async (req, res) => {
   const userId = req.user.id;
   const { username, email, bio, password, removeAvatar } = req.body;
 
+  console.log("updateMe → req.file:", !!req.file);  // ← single, like clips
+  console.log("updateMe → req.body:", req.body);
+
   try {
+    // Validation
     if (username && (username.length < 3 || username.length > 30))
       return res.status(400).json({ error: "Username must be 3-30 characters" });
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return res.status(400).json({ error: "Invalid email" });
 
     let avatar_url = undefined;
-    if (req.files?.avatar?.[0]) {
-      const file = req.files.avatar[0];
-      const ext = file.originalname.split(".").pop().toLowerCase();
-      const fileName = `avatars/${uuidv4()}_${Date.now()}.${ext}`;
+
+    // === NEW AVATAR UPLOAD (copied from createClip – proven working) ===
+    if (req.file) {
+      const file = req.file;
+      console.log("Uploading to GCS:", file.originalname);
+
+      const sanitizedFileName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const fileName = `avatars/${uuidv4()}_${sanitizedFileName}`;
       const blob = bucket.file(fileName);
-      await new Promise((resolve, reject) => {
-        blob.createWriteStream({ metadata: { contentType: file.mimetype } })
-          .on("error", reject)
-          .on("finish", resolve)
-          .end(file.buffer);
+      const blobStream = blob.createWriteStream({
+        metadata: { contentType: file.mimetype },
       });
+
+      await new Promise((resolve, reject) => {
+        blobStream.on("error", (err) => {
+          console.error("GCS upload failed:", err.message);
+          reject(err);
+        });
+        blobStream.on("finish", () => {
+          console.log("GCS upload success:", fileName);
+          resolve();
+        });
+        blobStream.end(file.buffer);
+      });
+
       avatar_url = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-    } else if (removeAvatar === "true") {
+    }
+    // === REMOVE AVATAR ===
+    else if (removeAvatar === "true") {
+      console.log("Removing avatar");
       const current = await pool.query("SELECT avatar_url FROM users WHERE id = $1", [userId]);
       if (current.rows[0]?.avatar_url) {
         const fileName = current.rows[0].avatar_url.split(`/${bucket.name}/`)[1];
-        if (fileName) await bucket.file(fileName).delete().catch(() => {});
+        if (fileName) {
+          await bucket.file(fileName).delete().catch(console.error);
+          console.log("GCS Delete Success:", fileName);
+        }
       }
       avatar_url = null;
     }
 
+    // === DB UPDATE ===
     const fields = [];
     const values = [];
     let i = 1;
@@ -215,6 +240,8 @@ export const updateMe = async (req, res) => {
       `UPDATE users SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, username, email, bio, avatar_url`,
       values
     );
+
+    console.log("DB Update Success → avatar_url:", result.rows[0].avatar_url);
 
     res.json({ user: result.rows[0] });
   } catch (err) {
