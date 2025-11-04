@@ -2,10 +2,20 @@
 import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,  // ← CHANGED: Use 587 (STARTTLS) instead of 465 (SSL) – better for cloud
+  secure: false,  // ← true for 465, false for other ports
   auth: {
     user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS,
+    pass: process.env.GMAIL_PASS,  // Your App Password
+  },
+  // ← ADDED: Increase timeouts for Render's slow network
+  connectionTimeout: 60000,  // 60 seconds (default: 10s)
+  greetingTimeout: 30000,    // 30 seconds
+  socketTimeout: 60000,      // 60 seconds
+  // ← ADDED: Ignore TLS cert errors (helps on some clouds)
+  tls: {
+    rejectUnauthorized: false,
   },
 });
 
@@ -38,6 +48,7 @@ export const sendResetEmail = async (to, resetUrl, expireMin = 15) => {
     console.log('Gmail sent! Message ID:', result.messageId);
   } catch (error) {
     console.error('Gmail error:', error.message);
+    console.error('Full error:', error);  // ← ADDED: More debug info
     throw error;
   }
 };
