@@ -15,6 +15,7 @@ import groupRouter from "./routes/groupRouters.js"; // ← fixed typo
 import followingFeedRoutes from "./routes/followingFeedRoutes.js";
 import createMessagesRouter from "./routes/messagesRoutes.js";
 import createClipsRouter from "./routes/clipRoutes.js";
+import passwordRoutes from "./routes/passwordRoutes.js";
 
 // Middleware
 import { authMiddleware } from "./middleware/auth.js";
@@ -61,6 +62,7 @@ socketHandler(io);
 // ---------------------- ROUTES ----------------------
 // Public
 app.use("/api/auth", authRoutes);
+app.use("/api/auth/password", passwordRoutes);
 
 // Protected
 app.use("/api/posts", authMiddleware, postRoutes);
